@@ -1069,7 +1069,7 @@ static int piBoardIdUsingDeviceTree (int *model, int *rev, int *mem, int *maker,
   if (strstr(buf, "Raspberry Pi 3 Model B") == buf)
   {
     *model = PI_MODEL_3;
-    *rev = PI_VERSION_2;
+    *rev = PI_VERSION_1_2;
     *mem = 2;
     *maker = PI_MAKER_UNKNOWN;
     *warranty = 0;
