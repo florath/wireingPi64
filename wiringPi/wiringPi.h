@@ -146,6 +146,7 @@ struct wiringPiNodeStruct
   unsigned int data1 ;	//  ditto
   unsigned int data2 ;	//  ditto
   unsigned int data3 ;	//  ditto
+  void *       ptr0 ;   //  ditto
 
            void   (*pinMode)          (struct wiringPiNodeStruct *node, int pin, int mode) ;
            void   (*pullUpDnControl)  (struct wiringPiNodeStruct *node, int pin, int mode) ;

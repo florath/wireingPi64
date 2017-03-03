@@ -685,15 +685,11 @@ static void piGpioLayoutOops (const char *why)
   exit (EXIT_FAILURE) ;
 }
 
-int piGpioLayout (void)
+static int piGpioLayoutUsingProcCpuinfo ()
 {
   FILE *cpuFd ;
   char line [120] ;
   char *c ;
-  static int  gpioLayout = -1 ;
-
-  if (gpioLayout != -1)	// No point checking twice
-    return gpioLayout ;
 
   if ((cpuFd = fopen ("/proc/cpuinfo", "r")) == NULL)
     piGpioLayoutOops ("Unable to open /proc/cpuinfo") ;
@@ -707,7 +703,8 @@ int piGpioLayout (void)
       break ;
 
   if (strncmp (line, "Hardware", 8) != 0)
-    piGpioLayoutOops ("No \"Hardware\" line") ;
+    // No way to get information here - try using the device tree
+    return -1;
 
   if (wiringPiDebug)
     printf ("piGpioLayout: Hardware: %s\n", line) ;
@@ -787,6 +784,7 @@ int piGpioLayout (void)
   if (wiringPiDebug)
     printf ("piGpioLayout: last4Chars are: \"%s\"\n", c) ;
 
+  int gpioLayout = -1;
   if ( (strcmp (c, "0002") == 0) || (strcmp (c, "0003") == 0))
     gpioLayout = 1 ;
   else
@@ -797,6 +795,47 @@ int piGpioLayout (void)
 
   return gpioLayout ;
 }
+
+static int piGpioLayoutUsingDeviceTree () {
+  FILE * fd = fopen ("/proc/device-tree/model", "r");
+  if (fd == NULL)
+    return 0;
+
+  char buf[80];
+  char const * read_res = fgets(buf, sizeof(buf), fd);
+  if (read_res == NULL)
+    return 0;
+
+  if (strstr(buf, "Raspberry Pi 3 Model B") == buf)
+  {
+    if (wiringPiDebug)
+      printf("piGpioLayoutUsingDeviceTree: Returning revision: 2\n");
+    return 2;
+  }
+
+  fprintf(stderr, "Unkown hardware / revision [%s]\n", buf);
+  exit (EXIT_FAILURE);
+}
+
+int piGpioLayout (void)
+{
+  static int  gpioLayout = -1 ;
+
+  if (gpioLayout != -1)	// No point checking twice
+    return gpioLayout;
+
+  gpioLayout = piGpioLayoutUsingProcCpuinfo();
+
+  if (gpioLayout == -1)
+    gpioLayout = piGpioLayoutUsingDeviceTree();
+
+  if (gpioLayout != -1)
+    return gpioLayout;
+
+  fprintf(stderr, "Unable to determine the GPIO layout");
+  exit (EXIT_FAILURE);
+}
+
 
 /*
  * piBoardRev:
@@ -878,7 +917,7 @@ int piBoardRev (void)
  *********************************************************************************
  */
 
-void piBoardId (int *model, int *rev, int *mem, int *maker, int *warranty)
+static int piBoardIdUsingProcCpuinfo (int *model, int *rev, int *mem, int *maker, int *warranty)
 {
   FILE *cpuFd ;
   char line [120] ;
@@ -901,7 +940,7 @@ void piBoardId (int *model, int *rev, int *mem, int *maker, int *warranty)
   fclose (cpuFd) ;
 
   if (strncmp (line, "Revision", 8) != 0)
-    piGpioLayoutOops ("No \"Revision\" line") ;
+    return 0;
 
 // Chomp trailing CR/NL
 
@@ -1012,9 +1051,48 @@ void piBoardId (int *model, int *rev, int *mem, int *maker, int *warranty)
 
     else                              { *model = 0           ; *rev = 0              ; *mem =   0 ; *maker = 0 ;               }
   }
+
+  return 1;
 }
  
+static int piBoardIdUsingDeviceTree (int *model, int *rev, int *mem, int *maker, int *warranty)
+{
+  FILE * fd = fopen ("/proc/device-tree/model", "r");
+  if (fd == NULL)
+    return 0;
 
+  char buf[80];
+  char const * read_res = fgets(buf, sizeof(buf), fd);
+  if (read_res == NULL)
+    return 0;
+
+  if (strstr(buf, "Raspberry Pi 3 Model B") == buf)
+  {
+    *model = PI_MODEL_3;
+    *rev = PI_VERSION_2;
+    *mem = 2;
+    *maker = PI_MAKER_UNKNOWN;
+    *warranty = 0;
+    return 1;
+  }
+
+  fprintf(stderr, "Unkown hardware / revision [%s]\n", buf);
+  exit (EXIT_FAILURE);
+}
+
+void piBoardId (int *model, int *rev, int *mem, int *maker, int *warranty)
+{
+  int const res_a = piBoardIdUsingProcCpuinfo(model, rev, mem, maker, warranty);
+  if (res_a == 1)
+    return;
+      
+  int const res_b = piBoardIdUsingDeviceTree(model, rev, mem, maker, warranty);
+  if (res_b == 1)
+    return;
+    
+  fprintf(stderr, "Unkown hardware / revision - cannot get board id\n");
+  exit (EXIT_FAILURE);
+}
 
 /*
  * wpiPinToGpio:
